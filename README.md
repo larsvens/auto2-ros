@@ -1,6 +1,6 @@
 
-## auto2-ros: ROS workspace for the AUTO2 autonomous forestry research project
-
+## auto2-ros: Workspace for the AUTO2 autonomous forestry research project
+![](misc/pointcloud.png)
 ### Setup instructions
 This section is meant to help new users get up and running quickly, so please add any added dependencies here.   
 
@@ -12,3 +12,4 @@ http://wiki.ros.org/kinetic/Installation
 We recommend using QTcreator https://ros-qtc-plugin.readthedocs.io/en/latest/ main IDE.
 
 ### Run instructions
+This section is for instructions on how to run data logging, experiments, simulations etc.
