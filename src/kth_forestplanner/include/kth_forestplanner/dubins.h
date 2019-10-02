@@ -22,6 +22,8 @@
 #ifndef DUBINS_H
 #define DUBINS_H
 
+#include "planning_util.h" // added to extract sampled path as struct
+
 typedef enum 
 {
     LSL = 0,
@@ -147,6 +149,10 @@ int dubins_path_sample_many(DubinsPath* path,
                             double stepSize, 
                             DubinsPathSamplingCallback cb, 
                             void* user_data);
+
+int dubins_get_sampled_path(DubinsPath* path,
+                     double stepSize,
+                     planning_util::pathstruct &pathstruct);
 
 /**
  * Convenience function to identify the endpoint of a path

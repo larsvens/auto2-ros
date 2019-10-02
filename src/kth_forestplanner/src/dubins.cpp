@@ -255,6 +255,23 @@ int dubins_path_sample_many(DubinsPath* path, double stepSize,
     return 0;
 }
 
+int dubins_get_sampled_path(DubinsPath* path,
+                     double stepSize,
+                     planning_util::pathstruct &pathstruct){
+    double q[3];
+    double x = 0.0;
+    double length = dubins_path_length(path);
+    while( x <  length ) {
+        dubins_path_sample( path, x, q );
+        pathstruct.X.push_back(q[0]);
+        pathstruct.Y.push_back(q[1]);
+        pathstruct.psi.push_back(q[2]);
+        pathstruct.s.push_back(x);
+        x += stepSize;
+    }
+    return 0;
+}
+
 int dubins_path_endpoint( DubinsPath* path, double q[3] )
 {
     return dubins_path_sample( path, dubins_path_length(path) - EPSILON, q );

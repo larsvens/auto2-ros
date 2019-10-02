@@ -1,9 +1,5 @@
 #include "kth_forestplanner/kth_forestplanner.h"
 
-int printConfiguration(double q[3], double x, void* user_data) {
-    printf("%f, %f, %f, %f\n", q[0], q[1], q[2], x);
-    return 0;
-}
 
 namespace kth_forestplanner_node {
 
@@ -13,11 +9,10 @@ ForestPlanner::ForestPlanner(ros::NodeHandle nh){
     ros::Rate loop_rate(1/dt);
 
     // pubs & subs
+    path_pub_ = nh.advertise<nav_msgs::Path>("path",1);
 
-    // visualization msgs
-
-    // wait until gridmap is received
-    bool gridmap_received = true; // tmp!
+    // wait until gridmap is received (temporarily disabled)
+    bool gridmap_received = true;
     while( !gridmap_received ){
         ROS_INFO_STREAM("waiting for gridmap");
         ros::spinOnce();
@@ -29,36 +24,64 @@ ForestPlanner::ForestPlanner(ros::NodeHandle nh){
         ROS_INFO_STREAM(" ");
         ROS_INFO_STREAM("main_ loop_");
 
+        // define initial and goal poses
         double q0[] = { 0,0,0 };
-        double q1[] = { 4,4,3.142 };
-        double turning_radius = 3.0;
-        DubinsPath path;
-        dubins_shortest_path( &path, q0, q1, turning_radius);
-        dubins_path_sample_many( &path, 0.5, printConfiguration, NULL);
+        //double q1[] = { 4,4,3.142 };
+        double q1[] = { 6,4,0 };
 
-        //std::cout << "qi:   "<< path.qi << std::endl;
-        //std::cout << "rho:  "<< path.rho << std::endl;
-        //std::cout << "type: "<< path.type << std::endl;
-        //std::cout << "param:"<< path.param << std::endl;
+        // define path properties
+        double ds = 0.5;
+        double turning_radius = 3.0;
+
+        // compute path
+        DubinsPath dubinspath;
+        dubins_shortest_path( &dubinspath, q0, q1, turning_radius);
+        planning_util::pathstruct p;
+        dubins_get_sampled_path(&dubinspath,ds,p);
+
+        ROS_INFO_STREAM("Computing single Dubins path of length " << p.s.size() * ds << "m ");
+
+        // build ros message
+        nav_msgs::Path path_msg = ForestPlanner::pathstruct2rospath(p);
+
+        // publish
+        path_pub_.publish(path_msg);
 
         ros::spinOnce();
         loop_rate.sleep();
-
     }
-
 }
 
-// function
+/*
+ * FUNCTIONS
+ */
 
-
-
+nav_msgs::Path ForestPlanner::pathstruct2rospath(planning_util::pathstruct ps){
+    nav_msgs::Path rp;
+    std::string frame_id = "base_link";
+    rp.header.stamp = ros::Time::now();
+    rp.header.frame_id = frame_id;
+    for (uint i=0;i<ps.s.size();i++){
+        geometry_msgs::PoseStamped pose;
+        pose.header.stamp = ros::Time::now();
+        pose.header.frame_id = frame_id;
+        pose.pose.position.x = double(ps.X.at(i));
+        pose.pose.position.y = double(ps.Y.at(i));
+        tf2::Quaternion q;
+        q.setRPY(0,0,double(ps.psi.at(i)));
+        pose.pose.orientation.w = q.w();
+        pose.pose.orientation.x = q.x();
+        pose.pose.orientation.y = q.y();
+        pose.pose.orientation.z = q.z();
+        rp.poses.push_back(pose);
+    }
+    return rp;
 }
 
 
+} // end namespace kth_forestplanner_node
 
-
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv){
     ros::init(argc, argv, "forestplanner");
     ros::NodeHandle nh;
     kth_forestplanner_node::ForestPlanner fp(nh);
