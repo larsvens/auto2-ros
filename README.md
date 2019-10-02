@@ -9,7 +9,9 @@ https://www.ubuntu.com/download/alternative-downloads
 http://wiki.ros.org/kinetic/Installation   
 
 ### Devel instructions
-We recommend using QTcreator https://ros-qtc-plugin.readthedocs.io/en/latest/ main IDE.
+We try our best to follow ROS coding practices: wiki.ros.org/CppStyleGuide , https://github.com/tdenewiler/node_example   
+We recommend using QTcreator https://ros-qtc-plugin.readthedocs.io/en/latest/ main IDE.   
+
 
 ### Run instructions
 This section is for instructions on how to run data logging, experiments, simulations etc.
