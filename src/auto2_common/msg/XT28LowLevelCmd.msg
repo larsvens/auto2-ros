@@ -1,0 +1,10 @@
+Header  header
+int cmd_mode
+float32 artangle_front_ref
+float32 artangle_rear_ref
+float32 artanglevel_front_ref
+float32 artanglevel_rear_ref
+float32[] wheel_angular_vels_ref
+float32[] wheel_torques_ref
+float32[] pend_angles_ref
+float32[] pend_torques_ref
