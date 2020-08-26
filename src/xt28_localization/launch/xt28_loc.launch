@@ -1,0 +1,13 @@
+<!-- launch xt28 localization node --> 
+
+<launch>
+
+    <!-- params -->
+    <param name="/dt_localization" value="0.05" type="double"/>
+    <param name="/global_plan_filename" value="200515_tomtebo_walk_trace.yaml" type="str"/>
+
+    <!-- experiment manager node -->
+    <node pkg="xt28_localization" type="xt28_loc_node.py" name="xt28_loc_node" output="screen"/>
+ 
+</launch>
+

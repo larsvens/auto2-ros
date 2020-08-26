@@ -1,3 +1,9 @@
+# hack to allow top level to be the git root (TODO reorganize)
+src/sensor_interface
+
+# we dont want to track gigantic .bagfiles
+*.bag
+
 devel/
 logs/
 build/
