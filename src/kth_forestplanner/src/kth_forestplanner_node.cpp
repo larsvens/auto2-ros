@@ -36,7 +36,7 @@ ForestPlanner::ForestPlanner(ros::NodeHandle nh){
         // compute path
         DubinsPath dubinspath;
         dubins_shortest_path( &dubinspath, q0, q1, turning_radius);
-        planning_util::pathstruct p;
+        cont::pathstruct p;
         dubins_get_sampled_path(&dubinspath,ds,p);
 
         ROS_INFO_STREAM("Computing single Dubins path of length " << p.s.size() * ds << "m ");
@@ -56,7 +56,7 @@ ForestPlanner::ForestPlanner(ros::NodeHandle nh){
  * FUNCTIONS
  */
 
-nav_msgs::Path ForestPlanner::pathstruct2rospath(planning_util::pathstruct ps){
+nav_msgs::Path ForestPlanner::pathstruct2rospath(cont::pathstruct ps){
     nav_msgs::Path rp;
     std::string frame_id = "base_link";
     rp.header.stamp = ros::Time::now();

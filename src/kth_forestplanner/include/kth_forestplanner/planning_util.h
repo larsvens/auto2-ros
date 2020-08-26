@@ -3,7 +3,7 @@
 
 #include <vector>
 
-namespace planning_util {
+namespace cont {
 
 // pathlocal representation
 struct pathstruct{

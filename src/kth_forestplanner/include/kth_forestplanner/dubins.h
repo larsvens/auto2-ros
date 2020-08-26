@@ -152,7 +152,7 @@ int dubins_path_sample_many(DubinsPath* path,
 
 int dubins_get_sampled_path(DubinsPath* path,
                      double stepSize,
-                     planning_util::pathstruct &pathstruct);
+                     cont::pathstruct &pathstruct);
 
 /**
  * Convenience function to identify the endpoint of a path

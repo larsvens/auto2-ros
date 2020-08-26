@@ -32,10 +32,10 @@ private:
     ros::Publisher path_pub_;
 
     // msg variables
-    planning_util::pathstruct path_;
+    cont::pathstruct path_;
 
     // functions
-    nav_msgs::Path pathstruct2rospath(planning_util::pathstruct);
+    nav_msgs::Path pathstruct2rospath(cont::pathstruct);
 
 };
 

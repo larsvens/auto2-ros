@@ -257,7 +257,7 @@ int dubins_path_sample_many(DubinsPath* path, double stepSize,
 
 int dubins_get_sampled_path(DubinsPath* path,
                      double stepSize,
-                     planning_util::pathstruct &pathstruct){
+                     cont::pathstruct &pathstruct){
     double q[3];
     double x = 0.0;
     double length = dubins_path_length(path);
