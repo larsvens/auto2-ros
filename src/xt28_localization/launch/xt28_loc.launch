@@ -4,13 +4,17 @@
 
     <!-- params -->
     <param name="/dt_localization" value="0.05" type="double"/>
+    <param name="/dt_pathglobal" value="5.00" type="double"/>
+
     <param name="/global_plan_filename" value="200515_tomtebo_walk_trace.yaml" type="str"/>
 
     <!-- experiment manager node -->
     <node pkg="xt28_localization" type="xt28_loc_node.py" name="xt28_loc_node" output="screen"/>
  
-    <!-- launch rviz 
+    <!-- launch rviz --> 
     <node name="rviz_" pkg="rviz" type="rviz" args="-d $(find auto2_common)/config/rviz/xt28_localization.rviz "/>
-    --> 
+
 </launch>
+
+
 
