@@ -12,6 +12,11 @@ import matplotlib.pyplot as plt
 import Tkinter, tkFileDialog
 import yaml
 
+from scipy import interpolate
+from lxml import etree 
+import re
+
+
 plt.close('all')
 
 # get filepath from gui

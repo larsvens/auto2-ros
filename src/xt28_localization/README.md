@@ -9,11 +9,16 @@ The script will generate a .yaml file in data/global_plans_yaml
 
 ## Run the localization node    
 Set parameters   
-* /global_plan_filename set to the filename of the generated .yaml file   
+* `/global_plan_filename` set to the filename of the generated .yaml file   
 
 The node subscribes to    
-* /fix of type ublox_sync/GNSSFix defined in sensor_interface package   
+* `/fix` of type ublox_sync/GNSSFix defined in sensor_interface package   
 
 And publishes   
-* /global_plan of type nav_msgs/Path   
-* /utm_origin of type ??   
+* `/global_plan` of type nav_msgs/Path   
+* `/utm_origin` of type ??   
+* `/state` of type ??
+
+It also broadcasts TF transform map -> base_link
+
+

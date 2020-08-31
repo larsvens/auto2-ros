@@ -9,5 +9,8 @@
     <!-- experiment manager node -->
     <node pkg="xt28_localization" type="xt28_loc_node.py" name="xt28_loc_node" output="screen"/>
  
+    <!-- launch rviz 
+    <node name="rviz_" pkg="rviz" type="rviz" args="-d $(find auto2_common)/config/rviz/xt28_localization.rviz "/>
+    --> 
 </launch>
 
