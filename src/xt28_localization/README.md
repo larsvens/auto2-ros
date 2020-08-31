@@ -16,8 +16,7 @@ The node subscribes to
 
 And publishes   
 * `/global_plan` of type nav_msgs/Path   
-* `/utm_origin` of type ??   
-* `/state` of type ??
+* `/state` of type custommessage?   
 
 It also broadcasts TF transform map -> base_link
 

@@ -43,7 +43,7 @@ class LocalizationNode:
 
         # pubs and subs etc
         self.tfbr = tf.TransformBroadcaster()
-        self.pathglobalpub = rospy.Publisher('pathglobal', Path, queue_size=1)
+        self.pathglobalpub = rospy.Publisher('global_plan', Path, queue_size=1)
         self.statetextmarkerpub = rospy.Publisher('state_text_marker', Marker, queue_size=1)
         self.gnsssub = rospy.Subscriber("/fix", GNSSFix, self.gnss_callback)
         self.fix = GNSSFix()
@@ -128,8 +128,6 @@ class LocalizationNode:
             
                 # get s and d position relative to pathglobal
                 s, d = self.ptsCartesianToFrenet(np.array([X_raw]),np.array([Y_raw]),X_map,Y_map,psic,s_map)
-                rospy.logwarn("xt28_loc: s = " + str(s))
-                rospy.logwarn("xt28_loc: d = " + str(d))
             
                 # publish text marker
                 state_text = "s:     " + "%.3f" % s + "\n"  \
