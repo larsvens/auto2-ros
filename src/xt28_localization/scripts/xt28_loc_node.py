@@ -12,7 +12,9 @@
 # ros
 import rospy
 import rospkg
-from nav_msgs.msg import Path as Path
+from auto2_common.msg import XT28State
+from auto2_common.msg import Path
+from nav_msgs.msg import Path as VisPath
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker
 import tf
@@ -44,6 +46,9 @@ class LocalizationNode:
         # pubs and subs etc
         self.tfbr = tf.TransformBroadcaster()
         self.pathglobalpub = rospy.Publisher('global_plan', Path, queue_size=1)
+        self.pathglobalpub_vis = rospy.Publisher('global_plan_vis', VisPath, queue_size=1)
+        self.statepub = rospy.Publisher("state", XT28State, queue_size=1)
+        self.state = XT28State()
         self.statetextmarkerpub = rospy.Publisher('state_text_marker', Marker, queue_size=1)
         self.gnsssub = rospy.Subscriber("/fix", GNSSFix, self.gnss_callback)
         self.fix = GNSSFix()
@@ -112,7 +117,10 @@ class LocalizationNode:
                 X_utm, Y_utm, utm_nr, utm_letter = utm.from_latlon(self.fix.latitude, self.fix.longitude)
                 X_raw = X_utm - self.origin_pose_utm["X0_utm"]
                 Y_raw = Y_utm - self.origin_pose_utm["Y0_utm"]
-                psi_raw = self.fix.heading
+                
+                #### TMP!!!! CHECH WHY KOMATSU LOG IS 90 DEG OFF
+                psi_raw = self.fix.heading-np.pi/2 
+                psi_raw = self.angleToInterval(np.array([psi_raw]))[0]
                 
                 # check utm zone
                 if(utm_nr != self.origin_pose_utm["utm_nr"] or utm_letter != self.origin_pose_utm["utm_letter"]):
@@ -136,9 +144,27 @@ class LocalizationNode:
                 m.header.stamp = rospy.Time.now()
                 self.statetextmarkerpub.publish(m) 
             
+                # publish state (using only a subset of fields for now)
+                self.state.header.stamp = rospy.Time.now()
+                self.state.X = X_raw
+                self.state.Y = Y_raw
+                self.state.psi = psi_raw
+                self.state.s = s
+                self.state.d = d
+                self.statepub.publish(self.state)
+                
+            
             # publish global path (at lower rate) 
             if(count >= self.pathglobal_pub_time_ratio):
-                pathglobalvis = Path()
+                pathglobal = Path()
+                pathglobal.X = X_map
+                pathglobal.Y = Y_map
+                pathglobal.psi = psic
+                pathglobal.s = s_map
+                self.pathglobalpub.publish(pathglobal)
+                
+                # publish visualization msg as well
+                pathglobalvis = VisPath()
                 for i in range(X_map.size):
                     pose = PoseStamped()
                     pose.header.stamp = rospy.Time.now()
@@ -153,7 +179,7 @@ class LocalizationNode:
                     pathglobalvis.poses.append(pose)
                 pathglobalvis.header.stamp = rospy.Time.now()
                 pathglobalvis.header.frame_id = "map"
-                self.pathglobalpub.publish(pathglobalvis)
+                self.pathglobalpub_vis.publish(pathglobalvis)
 
                 count = 0
             else:
@@ -168,7 +194,16 @@ class LocalizationNode:
         self.fix = msg
         self.received_gnss = True
         
-
+    def angleToInterval(self,psi):
+        try:         
+            for i in range(psi.size):
+                while(psi[i] > np.pi):
+                    psi[i] = psi[i] -2*np.pi
+                while(psi[i] <= -np.pi):
+                    psi[i] = psi[i] +2*np.pi
+            return psi
+        except ValueError:
+            print("Error in angleToInterval, psi.size = %i", psi.size)
     
     def ptsCartesianToFrenet(self,X,Y,Xpath,Ypath,psipath,spath):
         # inputs and outputs are np.array([x])
