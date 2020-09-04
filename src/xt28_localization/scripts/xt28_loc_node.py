@@ -1,34 +1,31 @@
 #!/usr/bin/env python
 
 # Descrition: 
-# at init load and publish 
-# * global path 
-# * utm origin
+# at init load and publish global path 
 # 
 # in loop publish
 # state (cartesian pose)
-# broadcast tf
+# broadcast tf map -> base_link
 
 # ros
 import rospy
 import rospkg
-from auto2_common.msg import XT28State
-from auto2_common.msg import Path
+import tf
+
+# msgs
+from ublox_sync.msg import GNSSFix
+from xt28_localization.msg import XT28State
+from xt28_localization.msg import Path
 from nav_msgs.msg import Path as VisPath
 from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker
-import tf
+from std_msgs.msg import Float32
 
-# custom msgs
-from ublox_sync.msg import GNSSFix
-
-# compute tools
+# various libs
 import numpy as np
-
-# coordinate system libs
+from lxml import etree 
+import re
 import utm
-
-# misc
 import yaml
 
 class LocalizationNode:
@@ -36,7 +33,7 @@ class LocalizationNode:
     def __init__(self):
         # init node
         rospy.init_node('xt28_localization', anonymous=True)
-        self.dt = rospy.get_param('/dt_localization')
+        self.dt = rospy.get_param('/dt_state')
         self.dt_gp = rospy.get_param('/dt_pathglobal')
         self.rate = rospy.Rate(1./self.dt)      
 
@@ -45,23 +42,53 @@ class LocalizationNode:
 
         # pubs and subs etc
         self.tfbr = tf.TransformBroadcaster()
+        
         self.pathglobalpub = rospy.Publisher('global_plan', Path, queue_size=1)
         self.pathglobalpub_vis = rospy.Publisher('global_plan_vis', VisPath, queue_size=1)
+        
         self.statepub = rospy.Publisher("state", XT28State, queue_size=1)
         self.state = XT28State()
         self.statetextmarkerpub = rospy.Publisher('state_text_marker', Marker, queue_size=1)
+        
         self.gnsssub = rospy.Subscriber("/fix", GNSSFix, self.gnss_callback)
         self.fix = GNSSFix()
         self.received_gnss = False
         
-        # load global plan yaml
+        self.vx_sub = rospy.Subscriber("/speed_control/state", Float32, self.vx_callback)
+        self.vx = 0.0
+        self.received_vx = False
+        
+        self.beta0_sub = rospy.Subscriber("/steering_control/state", Float32, self.beta0_callback)
+        self.beta0 = 0.0
+        self.received_beta0 = False
+        
+        # load global plan 
         filename = rospy.get_param('/global_plan_filename')
-        filepath = rospkg.RosPack().get_path('xt28_localization') + '/data/global_plans_yaml/' + filename
-        with open(filepath, 'r') as f:
-            path = yaml.load(f,Loader=yaml.SafeLoader)
+        filepath = rospkg.RosPack().get_path('xt28_localization') + '/data/global_plans/' + filename
+        if(filename.endswith('.yaml')):
+            rospy.logwarn("xt28_loc: loading global plan from yaml")
+            with open(filepath, 'r') as f:
+                path_yaml = yaml.load(f,Loader=yaml.SafeLoader)
+                lat = np.array(path_yaml["lat"])
+                lon = np.array(path_yaml["lon"])
+        elif(filename.endswith('.kml')):
+            rospy.logwarn("xt28_loc: loading global plan from kml")
+            tree = etree.parse(filepath)
+            elements = tree.findall('.//{http://www.opengis.net/kml/2.2}Placemark') # each element is a "feature" in google earth
+            ele_name = elements[0].find('.//{http://www.opengis.net/kml/2.2}name')
+            if (ele_name.text == "global_plan" and \
+                elements[0].find('.//{http://www.opengis.net/kml/2.2}LineString') is not None and \
+                len(elements) == 1):  # check kml format
+                    lat, lon, alt = self.coords_text_to_np(elements[0].find('.//{http://www.opengis.net/kml/2.2}coordinates').text)
+            else:
+                rospy.logerr("xt28_loc: Error loading kml global plan, kml file has wrong format, check README.md for correct format") 
+            
 
-        # convert to utm
-        Xgp_utm,Ygp_utm,utm_nr,utm_letter = utm.from_latlon(np.array(path["lat"]), np.array(path["lon"]))
+        else: 
+            rospy.logerr("xt28_loc: Error intializing, faulty global_plan_filename (.yaml or .kml only): " + filename)
+            
+        # convert global plan to utm
+        Xgp_utm,Ygp_utm,utm_nr,utm_letter = utm.from_latlon(lat, lon)
     
         # set path in map coord sys (filter to ca 1pt/m)
         X_map_tmp = Xgp_utm - Xgp_utm[0]
@@ -103,8 +130,6 @@ class LocalizationNode:
           "utm_letter": utm_letter
         }
         
-        # check
-        print X_map.size
 
         # Main loop
         count  = 0
@@ -118,7 +143,7 @@ class LocalizationNode:
                 X_raw = X_utm - self.origin_pose_utm["X0_utm"]
                 Y_raw = Y_utm - self.origin_pose_utm["Y0_utm"]
                 
-                #### TMP!!!! CHECH WHY KOMATSU LOG IS 90 DEG OFF
+                #### TMP!!!! CHECK WHY KOMATSU LOG IS 90 DEG OFF
                 psi_raw = self.fix.heading-np.pi/2 
                 psi_raw = self.angleToInterval(np.array([psi_raw]))[0]
                 
@@ -138,9 +163,11 @@ class LocalizationNode:
                 s, d = self.ptsCartesianToFrenet(np.array([X_raw]),np.array([Y_raw]),X_map,Y_map,psic,s_map)
             
                 # publish text marker
-                state_text = "s:     " + "%.3f" % s + "\n"  \
-                             "d:     " + "%.3f" % d 
-                m = self.get_state_text_marker(state_text)
+                text =       "s:     " + "%.3f" % s + "\n"  \
+                             "d:     " + "%.3f" % d + "\n"  \
+                             "vx:    " + "%.3f" % self.vx + "\n" \
+                             "beta0: " + "%.3f" % self.beta0
+                m = self.get_text_marker(text)
                 m.header.stamp = rospy.Time.now()
                 self.statetextmarkerpub.publish(m) 
             
@@ -151,6 +178,8 @@ class LocalizationNode:
                 self.state.psi = psi_raw
                 self.state.s = s
                 self.state.d = d
+                self.state.vx = self.vx
+                self.state.beta0 = self.beta0
                 self.statepub.publish(self.state)
                 
             
@@ -185,14 +214,20 @@ class LocalizationNode:
             else:
                 count +=1
             
-            
-            #rospy.logwarn("xt28_loc: in main loop")
             self.rate.sleep()
                         
 
     def gnss_callback(self, msg):
         self.fix = msg
         self.received_gnss = True
+        
+    def vx_callback(self, msg):
+        self.vx = msg.data
+        self.received_vx = True
+    
+    def beta0_callback(self, msg):
+        self.beta0 = msg.data
+        self.received_beta0 = True
         
     def angleToInterval(self,psi):
         try:         
@@ -246,13 +281,35 @@ class LocalizationNode:
             s[k] = sc + deltas
             
         return s,d 
+
+    def coords_text_to_np(self,coords):
+        # clean and cast
+        coords = re.split(',| ',coords)
+        coords[0] = coords[0].translate(None, "\n\t\t\t\t")
+        coords = coords[:-1]
+    
+        # split in lon lat and alt
+        if(len(coords) % 3 != 0):
+            print "Error: len(coords) not divisible by three"
+        lat = []
+        lon = []
+        alt = []
+        for i in range(len(coords)/3):
+            lon.append(float(coords[3*i]))
+            lat.append(float(coords[3*i+1]))
+            alt.append(float(coords[3*i+2]))
+        lat = np.array(lat)
+        lon = np.array(lon)
+        alt = np.array(alt)
+    
+        return lat, lon, alt
  
-    def get_state_text_marker(self,text):
+    def get_text_marker(self,text):
         m = Marker()
         m.header.frame_id = "base_link"
         m.pose.position.x = 0.0;
         m.pose.position.y = 0.0;
-        m.pose.position.z = 10.0;
+        m.pose.position.z = 20.0;
         m.type = m.TEXT_VIEW_FACING;
         m.text = text
         m.scale.x = 2.0;

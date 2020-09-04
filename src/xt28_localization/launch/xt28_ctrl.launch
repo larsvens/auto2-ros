@@ -1,0 +1,17 @@
+<!-- launch xt28 tracking node --> 
+
+<launch>
+
+    <!-- params -->
+    <param name="/dt_cmd" value="0.05" type="double"/>
+
+    <!-- XT28 tracking node -->
+    <node pkg="xt28_localization" type="xt28_ctrl_node.py" name="xt28_ctrl_node" output="screen"/>
+
+    <!-- XT28 live input gui -->
+    <node name = "xt28_live_input_dashboard" pkg = "rqt_gui" type = "rqt_gui" output = "screen" args = "--perspective-file $(find xt28_localization)/config/rqt/xt28_live_input.perspective"/>
+
+</launch>
+
+
+

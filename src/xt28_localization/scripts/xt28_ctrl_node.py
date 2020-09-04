@@ -1,20 +1,11 @@
 #!/usr/bin/env python
 
-# Temporarily placed in xt28_localization for convenience
-
-# Descrition: Produces control signals to track a path (global or local)
-
-# subscribes:
-# state from stateestimation node (topic /state)
-# local or global path from to track (topic /pathlocal)
-
-# publishes: 
-# vehicle specific ctrl command 
+# Descrition: See doc/README.md
 
 import numpy as np
 import rospy
-from auto2_common.msg import XT28State
-from auto2_common.msg import Path
+from xt28_localization.msg import XT28State
+from xt28_localization.msg import Path
 from visualization_msgs.msg import Marker
 from geometry_msgs.msg import Point
 from std_msgs.msg import Float32
@@ -25,7 +16,7 @@ class CtrlInterface:
         
         # init node 
         rospy.init_node('xt_28_ctrl_interface', anonymous=True)
-        self.dt = 0.05
+        self.dt = rospy.get_param('/dt_cmd')
         self.rate = rospy.Rate(1/self.dt)
         
         # subs
@@ -42,17 +33,24 @@ class CtrlInterface:
         self.state_received = False
         
         self.ctrlmodesub = rospy.Subscriber("ctrl_mode", Int16, self.ctrl_mode_callback)
-        self.ctrl_mode = 1 # 0: stop, 1: track_global_plan, 2: track_local_plan
+        self.ctrl_mode = 0 # init to 0 (no cmds published)
         self.ctrl_mode_received = False
         
-        self.vxrefsub = rospy.Subscriber("vxref", Float32, self.vxref_callback)
-        self.vxref = 1.0 
-        self.vx_ref_received = False
+        self.gasrefsub = rospy.Subscriber("gasref", Float32, self.gasref_callback)
+        self.gasref = 0.0 
+        self.gasref_received = False
         
         # pubs
         self.lhptpub = rospy.Publisher('/lhpt_vis', Marker, queue_size=1)
         self.arcpub = rospy.Publisher('/arc_vis', Marker, queue_size=1)
-        #self.cmdpub = rospy.Publisher('OpenDLV/ActuationRequest', ActuationRequest, queue_size=1)
+
+        self.steering_cmd_pub = rospy.Publisher('/steering_command', Float32, queue_size=1)
+        self.steering_cmd = Float32()
+
+        self.throttle_cmd_pub = rospy.Publisher('/Gas', Float32, queue_size=1)
+        self.throttle_cmd = Float32()
+
+        self.ctrltextmarkerpub = rospy.Publisher('ctrl_text_marker', Marker, queue_size=1)
 
         # params (TODO ADJUST)
         self.L0 = 1.5 # from front axle to front articulated joint
@@ -63,39 +61,60 @@ class CtrlInterface:
             rospy.loginfo_throttle(1, "waiting for state")
             self.rate.sleep()
 
-        if(self.ctrl_mode == 1):
-            while(not self.pathglobal_received):
-                rospy.loginfo_throttle(1, "waiting for pathglobal")
-                self.rate.sleep()
-        elif(self.ctrl_mode == 2):
-            while(not self.pathlocal_received):
-                rospy.loginfo_throttle(1, "waiting for pathlocal")
-                self.rate.sleep()
-
 #        while(not self.ctrl_mode_received):
 #            rospy.loginfo_throttle(1, "waiting for ctrl_mode")
 #            self.rate.sleep
             
         # main loop
         while not rospy.is_shutdown(): 
-            # COMPUTE CONTROL
+            # wait for path
+            if(self.ctrl_mode in [0,1,2]):
+                while(not self.pathglobal_received):
+                    rospy.loginfo_throttle(1, "waiting for pathglobal")
+                    self.rate.sleep()
+            elif(self.ctrl_mode == 3):
+                while(not self.pathlocal_received):
+                    rospy.loginfo_throttle(1, "waiting for pathlocal")
+                    self.rate.sleep()
+            # compute and visualize ctrl
+            rospy.loginfo_throttle(1,"XT28_ctrl_interface: TRACKING, ctrl_mode = " + str(self.ctrl_mode)) 
+            lhdist = 10
+            if(np.abs(self.state.d) > lhdist):
+                rospy.logwarn_throttle(1,"XT28_ctrl_interface: WARNING: dist to path larger than lhdist" )
+            rho = self.pp_curvature(self.state, self.pathglobal, lhdist)                
+            beta_ref = rho*(self.L0+self.L1)
+            
+
+            # publish ctrl text marker
+            text =      "ctrl_mode:    " + "%.3f" % self.ctrl_mode + "\n"  \
+                        "steering_cmd: " + "%.3f" % beta_ref + "\n"  \
+                        "throttle_cmd: " + "%.3f" % self.gasref 
+            if(self.ctrl_mode in [0,1]): 
+                m = self.get_text_marker(text,1,0,0) # red means not published
+            else:
+                m = self.get_text_marker(text,0,1,0) # green means published
+            m.header.stamp = rospy.Time.now()
+            self.ctrltextmarkerpub.publish(m)                            
+
+            # publish ctrl 
             if(self.ctrl_mode == 0):
-                rospy.loginfo_throttle(1,"XT28_ctrl_interface: STOP, ctrl_mode = " + str(self.ctrl_mode)) 
-                # no cmd published
-            elif(self.ctrl_mode in [1,2]):
-                rospy.loginfo_throttle(1,"XT28_ctrl_interface: TRACKING, ctrl_mode = " + str(self.ctrl_mode)) 
-                lhdist = 10
-                rho = self.pp_curvature(self.state, self.pathglobal, lhdist)                
-                beta_ref = rho*(self.L0+self.L1)
-                rospy.loginfo_throttle(1,"XT28_ctrl_interface: beta_ref = " + str(beta_ref)) 
-                vx_ref = 0
-                # publish cmd
-                #self.cmdpub.publish(self.cmd)                                 
+                rospy.loginfo_throttle(1,"XT28_ctrl_interface: STOP, ctrl_mode = " + str(self.ctrl_mode) + " (no cmd published)") 
+            elif(self.ctrl_mode == 1):
+                rospy.loginfo_throttle(1,"XT28_ctrl_interface: STOP, ctrl_mode = " + str(self.ctrl_mode) + " (publishing zero cmds)") 
+                self.publish_cmds(0.0,0.0)
+            elif(self.ctrl_mode in [2,3]):               
+                self.publish_cmds(beta_ref,self.gasref)
             else:
                 rospy.logerr("XT28_ctrl_interface: invalid ctrl_mode! ctrl_mode = " + str(self.ctrl_mode))
-
             self.rate.sleep()
-            
+  
+    def publish_cmds(self,beta_ref,gas_ref):
+        # publish steering cmd
+        self.steering_cmd.data = beta_ref
+        self.steering_cmd_pub.publish(self.steering_cmd)
+        # publish throttle cmd
+        self.throttle_cmd.data = gas_ref
+        self.throttle_cmd_pub.publish(self.throttle_cmd)
     
     def pp_curvature(self, state, path, lhdist):
         
@@ -170,6 +189,23 @@ class CtrlInterface:
         m.color.b = 1.0;
         return m
 
+    def get_text_marker(self,text,r,g,b):
+        m = Marker()
+        m.header.frame_id = "base_link"
+        m.pose.position.x = 0.0;
+        m.pose.position.y = 0.0;
+        m.pose.position.z = 10.0;
+        m.type = m.TEXT_VIEW_FACING;
+        m.text = text
+        m.scale.x = 2.0;
+        m.scale.y = 2.0;
+        m.scale.z = 2.0;
+        m.color.a = 1.0; 
+        m.color.r = r;
+        m.color.g = g;
+        m.color.b = b;
+        return m
+    
     def pathglobal_callback(self, msg):
         self.pathglobal = msg
         self.pathglobal_received = True
@@ -186,9 +222,9 @@ class CtrlInterface:
         self.ctrl_mode = msg.data
         self.ctrl_mode_received = True
         
-    def vxref_callback(self, msg):
-        self.cc_vxref = msg.data
-        self.vx_ref_received = True
+    def gasref_callback(self, msg):
+        self.gasref = msg.data
+        self.gasref_received = True
     
 
 if __name__ == '__main__':
